@@ -2,8 +2,7 @@ import fs from 'fs';
 import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import readline from 'readline';
-import credentials from '../../credentials.json';
-import { TOKEN_PATH } from '../config';
+import { TOKEN_PATH, CREDENTIALS_PATH } from '../config';
 import { auth as authLogger, token as tokenLogger } from '../utils/debug';
 
 // Scopes define what access we're requesting from the user's Gmail account
@@ -11,11 +10,72 @@ const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
 const REDIRECT_URI = 'http://localhost:3000';
 
 /**
+ * Interface for Google OAuth credentials
+ */
+interface GoogleCredentials {
+  installed: {
+    client_id: string;
+    client_secret: string;
+    project_id: string;
+    auth_uri: string;
+    token_uri: string;
+    auth_provider_x509_cert_url: string;
+    redirect_uris: string[];
+  };
+}
+
+/**
  * Creates and returns an authenticated OAuth2 client for Gmail API access
  */
 export async function getAuthenticatedClient(): Promise<OAuth2Client> {
+  // Check if credentials file exists
+  if (!fs.existsSync(CREDENTIALS_PATH)) {
+    throw new Error(`
+❌ Missing Google OAuth credentials!
+
+To fix this issue:
+
+1. Go to the Google Cloud Console: https://console.cloud.google.com/
+2. Create a new project (or select an existing one)
+3. Enable the Gmail API:
+   - Go to "APIs & Services" > "Library"
+   - Search for "Gmail API" and enable it
+4. Create OAuth 2.0 credentials:
+   - Go to "APIs & Services" > "Credentials"
+   - Click "Create Credentials" > "OAuth 2.0 Client IDs"
+   - Choose "Desktop application" as the application type
+   - Name it something like "Job Pilot Gmail Access"
+   - Download the credentials JSON file
+5. Save the downloaded file as "credentials.json" in the root directory of this project
+
+The credentials.json file should look like this:
+{
+  "installed": {
+    "client_id": "YOUR_CLIENT_ID.googleusercontent.com",
+    "project_id": "your-project-id", 
+    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+    "token_uri": "https://oauth2.googleapis.com/token",
+    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+    "client_secret": "YOUR_CLIENT_SECRET",
+    "redirect_uris": ["http://localhost:3000"]
+  }
+}
+
+After adding the credentials.json file, run the application again.
+`);
+  }
+
+  // Load credentials
+  let credentials: GoogleCredentials;
+  try {
+    const credentialsContent = fs.readFileSync(CREDENTIALS_PATH, 'utf-8');
+    credentials = JSON.parse(credentialsContent);
+  } catch (error) {
+    throw new Error(`Failed to load credentials from ${CREDENTIALS_PATH}: ${error}`);
+  }
+
   // Create the OAuth client with our credentials
-  const oAuth2Client = createOAuthClient();
+  const oAuth2Client = createOAuthClient(credentials);
   
   // Try to use an existing token first (if available)
   if (await tryLoadExistingToken(oAuth2Client)) {
@@ -29,7 +89,7 @@ export async function getAuthenticatedClient(): Promise<OAuth2Client> {
 /**
  * Creates an OAuth2 client using credentials from the credentials file
  */
-function createOAuthClient(): OAuth2Client {
+function createOAuthClient(credentials: GoogleCredentials): OAuth2Client {
   authLogger.log('Creating OAuth client');
   const { client_secret, client_id } = credentials.installed;
   return new google.auth.OAuth2(client_id, client_secret, REDIRECT_URI);
@@ -49,6 +109,28 @@ async function tryLoadExistingToken(oAuth2Client: OAuth2Client): Promise<boolean
   try {
     const token = JSON.parse(fs.readFileSync(TOKEN_PATH, 'utf-8'));
     oAuth2Client.setCredentials(token);
+    
+    // Check if the token is expired
+    if (token.expiry_date && token.expiry_date <= Date.now()) {
+      tokenLogger.log('Token is expired, attempting to refresh...');
+      
+      // Try to refresh the token
+      try {
+        const { credentials } = await oAuth2Client.refreshAccessToken();
+        oAuth2Client.setCredentials(credentials);
+        
+        // Save the refreshed token
+        fs.writeFileSync(TOKEN_PATH, JSON.stringify(credentials));
+        tokenLogger.log('Token refreshed and saved successfully');
+        return true;
+      } catch (refreshError) {
+        tokenLogger.error('Failed to refresh token: %O', refreshError);
+        // Delete the invalid token file
+        fs.unlinkSync(TOKEN_PATH);
+        return false;
+      }
+    }
+    
     tokenLogger.log('Successfully loaded existing token');
     return true;
   } catch (error) {

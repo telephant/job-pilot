@@ -1,8 +1,7 @@
 import { fetchLinkedInAlerts } from './email/fetchLinkedInAlerts';
 import { startServer } from './server';
 import { main as mainLogger, setupDebug } from './utils/debug';
-import { JobListing } from './email/jobParser';
-import { batchScrapeJDs, JobDescription } from './scraper/scrapeJD';
+import { batchScrapeJDs } from './scraper/scrapeJD';
 
 // Enable debug logs by default
 setupDebug();

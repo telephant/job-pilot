@@ -42,6 +42,11 @@ export const scraper: Logger = {
   error: debug(`${BASE_NAMESPACE}:scraper:error`)
 };
 
+export const generator: Logger = {
+  log: debug(`${BASE_NAMESPACE}:generator`),
+  error: debug(`${BASE_NAMESPACE}:generator:error`)
+};
+
 // General error logger
 export const error = debug(`${BASE_NAMESPACE}:error`);
 
@@ -73,6 +78,7 @@ export default {
   server,
   main,
   scraper,
+  generator,
   error,
   setupDebug,
   createLogger

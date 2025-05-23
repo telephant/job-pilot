@@ -17,7 +17,7 @@ export const fetchLinkedInAlerts = async (): Promise<JobListing[]> => {
   const res = await gmail.users.messages.list({
     userId: 'me',
     q: 'from:(jobs-noreply@linkedin.com) subject:(jobs)',
-    maxResults: 1,
+    maxResults: 10,
   });
 
   // todo: test 1 email

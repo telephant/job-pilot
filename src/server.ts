@@ -1,6 +1,5 @@
 import express, { Express } from 'express';
 import path from 'path';
-import open from 'open';
 import { server as serverLogger } from './utils/debug';
 
 const app: Express = express();
@@ -34,7 +33,8 @@ export function startServer(): Promise<void> {
 
 // Auto-start server when this module is imported directly
 if (require.main === module) {
-  startServer().then(() => {
+  startServer().then(async () => {
+    const { default: open } = await import('open');
     open(`http://localhost:${PORT}`);
   });
 }
